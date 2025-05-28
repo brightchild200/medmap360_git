@@ -1,31 +1,57 @@
+// src/types/index.ts
+
+export interface Location {
+    latitude: number;
+    longitude: number;
+}
+
 export interface Facility {
     id: string;
     name: string;
     type: 'hospital' | 'pharmacy' | 'clinic' | 'ambulance';
-    location: {
-        latitude: number;
-        longitude: number;
+    location: Location;
+    address?: string;
+    phone?: string;
+    email?: string;
+    website?: string;
+    operatingHours?: {
+        [key: string]: string; // e.g., "monday": "9:00 AM - 5:00 PM"
     };
-    accessibility: boolean;
-    availableBeds?: number;
-    availableOxygen?: number;
-    availableMedicines?: string[];
+    services?: string[];
+    emergency?: boolean;
+    verified?: boolean;
+    rating?: number;
+    lastUpdated?: Date | string;
 }
 
 export interface AvailabilityReport {
     id: string;
     facilityId: string;
-    type: 'bed' | 'oxygen' | 'medicine';
-    location: {
-        latitude: number;
-        longitude: number;
-    };
-    validTill: Date;
+    type: 'hospital' | 'pharmacy' | 'clinic' | 'ambulance';
+    location: Location;
+    validTill: Date | string;
+    timestamp?: Date | string;
+    reportedBy?: string;
+    status?: 'available' | 'busy' | 'closed';
+    additionalInfo?: string;
 }
 
-export interface User {
+export interface AccessibilityData {
     id: string;
-    name: string;
-    email: string;
-    role: 'user' | 'admin';
+    facilityId: string;
+    type: 'hospital' | 'pharmacy' | 'clinic' | 'ambulance';
+    location: Location;
+    accessibilityFeatures: {
+        wheelchairAccessible: boolean;
+        hasElevator: boolean;
+        hasRamps: boolean;
+        accessibleParking: boolean;
+        accessibleRestrooms: boolean;
+        signLanguageSupport: boolean;
+        brailleSignage: boolean;
+    };
+    validTill: Date | string;
+    timestamp?: Date | string;
+    reportedBy?: string;
+    additionalInfo?: string;
 }
