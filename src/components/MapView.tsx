@@ -1,176 +1,292 @@
-import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import L, { LatLngTuple } from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-// import './styles/tailwind.css';
 
+
+
+//google map niche
+
+import React, { useEffect, useState } from 'react';
+import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
 import useFacilities from '../hooks/useFacilities';
 import { Facility } from '../types';
 
-// Fix Leaflet default icon path issue
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+const containerStyle = {
+  width: '100%',
+  height: '100vh' // Using viewport height but not full screen since it's embedded in a page
+};
 
-// Configure default icons
-L.Icon.Default.mergeOptions({
-  iconUrl: markerIcon,
-  iconRetinaUrl: markerIcon2x,
-  shadowUrl: markerShadow,
-});
-
-// Default icon function - fallback if getIconByType doesn't work
-const getDefaultIcon = (type: string) => {
-  return L.icon({
-    iconUrl: markerIcon,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowUrl: markerShadow,
-    shadowSize: [41, 41]
-  });
+const center = {
+  lat: -3.745,
+  lng: -38.523
 };
 
 const MapView: React.FC = () => {
-  const { facilities, loading, error } = useFacilities();
-  
-  const defaultCenter: LatLngTuple = [19.0760, 72.8777]; // Mumbai
-  const [mapCenter, setMapCenter] = useState<LatLngTuple>(defaultCenter);
+  const { facilities, loading } = useFacilities();
+  const [mapCenter, setMapCenter] = useState(center);
 
   useEffect(() => {
-    if (facilities && facilities.length > 0) {
-      try {
-        const latitudes = facilities.map((facility: Facility) => facility.location.latitude);
-        const longitudes = facilities.map((facility: Facility) => facility.location.longitude);
+    if (facilities.length > 0) {
+      // Filter facilities that have valid location data
+      const validFacilities = facilities.filter(
+        (facility: Facility) => 
+          facility.location && 
+          typeof facility.location.latitude === 'number' && 
+          typeof facility.location.longitude === 'number'
+      );
+
+      if (validFacilities.length > 0) {
+        const latitudes = validFacilities.map((facility: Facility) => facility.location.latitude);
+        const longitudes = validFacilities.map((facility: Facility) => facility.location.longitude);
         const avgLat = latitudes.reduce((a, b) => a + b, 0) / latitudes.length;
         const avgLng = longitudes.reduce((a, b) => a + b, 0) / longitudes.length;
-        
-        // Only update if we have valid coordinates
-        if (!isNaN(avgLat) && !isNaN(avgLng)) {
-          setMapCenter([avgLat, avgLng]);
-        }
-      } catch (err) {
-        console.error('Error calculating map center:', err);
+        setMapCenter({ lat: avgLat, lng: avgLng });
       }
     }
   }, [facilities]);
 
-  // Debug logging
-  console.log('MapView render:', { facilities, loading, error });
+  // Function to get marker icon based on facility type
+  const getMarkerIcon = (facilityType: string) => {
+    const iconUrl = facilityType === 'hospital' 
+      ? '/assets/icons/hospital.svg'
+      : facilityType === 'pharmacy'
+      ? '/assets/icons/pharmacy.svg'
+      : facilityType === 'clinic'
+      ? '/assets/icons/clinic.svg'
+      : '/assets/icons/ambulance.svg';
 
-  if (error) {
+    // Check if window.google is available
+    if (typeof window !== 'undefined' && window.google && window.google.maps) {
+      return {
+        url: iconUrl,
+        scaledSize: new window.google.maps.Size(30, 30)
+      };
+    }
+    
+    // Fallback - return just the URL
+    return {
+      url: iconUrl
+    };
+  };
+
+  // Get the API key from environment variables
+  const googleMapsApiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+
+  // Handle case where API key is not available
+  if (!googleMapsApiKey) {
     return (
-      <div className="w-full h-[400px] rounded-lg overflow-hidden shadow-lg flex items-center justify-center bg-gray-100">
-        <p className="text-red-500">Error loading map: {error}</p>
+      <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div>Google Maps API key not found. Please check your environment variables.</div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-[400px] rounded-lg overflow-hidden shadow-lg">
-      {loading && (
-        <div className="absolute top-2 left-2 z-[1000] bg-white px-3 py-1 rounded shadow">
-          <p className="text-sm">Loading facilities...</p>
-        </div>
-      )}
-      
-      <MapContainer 
-        center={mapCenter} 
-        zoom={13} 
-        style={{ height: '100%', width: '100%' }}
-        key={`${mapCenter[0]}-${mapCenter[1]}`} // Force re-render when center changes
+    <LoadScript googleMapsApiKey={googleMapsApiKey}>
+      <GoogleMap
+        mapContainerStyle={containerStyle}
+        center={mapCenter}
+        zoom={12}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        
-        {facilities && facilities.map((facility: Facility) => {
-          // Validate coordinates
-          if (!facility.location || 
-              typeof facility.location.latitude !== 'number' || 
-              typeof facility.location.longitude !== 'number' ||
-              isNaN(facility.location.latitude) || 
-              isNaN(facility.location.longitude)) {
-            console.warn('Invalid facility coordinates:', facility);
-            return null;
-          }
-
-          return (
+        {loading && (
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'white',
+            padding: '10px',
+            borderRadius: '5px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+          }}>
+            Loading...
+          </div>
+        )}
+        {facilities
+          .filter((facility: Facility) => 
+            facility.location && 
+            typeof facility.location.latitude === 'number' && 
+            typeof facility.location.longitude === 'number'
+          )
+          .map((facility: Facility) => (
             <Marker
               key={facility.id}
-              position={[facility.location.latitude, facility.location.longitude]}
-              icon={getDefaultIcon(facility.type)}
-            >
-              <Popup>
-                <div>
-                  <h3 className="font-bold">{facility.name || 'Unnamed Facility'}</h3>
-                  <p>{facility.type || 'Unknown Type'}</p>
-                  <p className="text-xs text-gray-500">
-                    {facility.location.latitude.toFixed(4)}, {facility.location.longitude.toFixed(4)}
-                  </p>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
-      </MapContainer>
-    </div>
+              position={{
+                lat: facility.location.latitude,
+                lng: facility.location.longitude
+              }}
+              icon={getMarkerIcon(facility.type)}
+              title={facility.name || facility.type}
+              onClick={() => {
+                console.log('Marker clicked:', facility);
+              }}
+            />
+          ))}
+      </GoogleMap>
+    </LoadScript>
   );
 };
 
 export default MapView;
 
+// google map upar
 
 
-// import React, { useEffect, useState } from 'react';
-// import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
-// import { useFacilities } from '../hooks/useFacilities';
+
+
+
+// maptiler niche 
+
+// import React, { useEffect, useRef, useState } from 'react';
+// import * as maptilersdk from '@maptiler/sdk';
+// import '@maptiler/sdk/dist/maptiler-sdk.css';
+// import useFacilities from '../hooks/useFacilities';
 // import { Facility } from '../types';
 
-// const containerStyle = {
-//   width: '100%',
-//   height: '400px'
-// };
-
-// const center = {
-//   lat: -3.745,
-//   lng: -38.523
-// };
 
 // const MapView: React.FC = () => {
+//   const mapContainer = useRef<HTMLDivElement>(null);
+//   const map = useRef<maptilersdk.Map | null>(null);
 //   const { facilities, loading } = useFacilities();
-//   const [mapCenter, setMapCenter] = useState(center);
+//   const [mapLoaded, setMapLoaded] = useState(false);
+
+//   // Set your MapTiler API key
+//   maptilersdk.config.apiKey = process.env.REACT_APP_MAPTILER_API_KEY || '5HGLYGHxy3G5iOn3nRF7';
+
+//   const center = [-38.523, -3.745]; // [lng, lat] - note the order is different from Google Maps
 
 //   useEffect(() => {
-//     if (facilities.length > 0) {
-//       const latitudes = facilities.map((facility: Facility) => facility.location.lat);
-//       const longitudes = facilities.map((facility: Facility) => facility.location.lng);
-//       const avgLat = latitudes.reduce((a, b) => a + b, 0) / latitudes.length;
-//       const avgLng = longitudes.reduce((a, b) => a + b, 0) / longitudes.length;
-//       setMapCenter({ lat: avgLat, lng: avgLng });
+//     if (map.current) return; // stops map from intializing more than once
+
+//     if (!process.env.REACT_APP_MAPTILER_API_KEY && !maptilersdk.config.apiKey) {
+//       console.error('MapTiler API key not found');
+//       return;
 //     }
-//   }, [facilities]);
+
+//     map.current = new maptilersdk.Map({
+//       container: mapContainer.current!,
+//       style: maptilersdk.MapStyle.STREETS, // You can change this to other styles
+//       // center: center,
+//       zoom: 12
+//     });
+
+//     map.current.on('load', () => {
+//       setMapLoaded(true);
+//     });
+
+//     return () => {
+//       if (map.current) {
+//         map.current.remove();
+//       }
+//     };
+//   }, []);
+
+//   useEffect(() => {
+//     if (!map.current || !mapLoaded || facilities.length === 0) return;
+
+//     // Clear existing markers
+//     const existingMarkers = document.querySelectorAll('.custom-marker');
+//     existingMarkers.forEach(marker => marker.remove());
+
+//     // Filter facilities with valid location data
+//     const validFacilities = facilities.filter(
+//       (facility: Facility) => 
+//         facility.location && 
+//         typeof facility.location.latitude === 'number' && 
+//         typeof facility.location.longitude === 'number'
+//     );
+
+//     if (validFacilities.length === 0) return;
+
+//     // Calculate center point
+//     const latitudes = validFacilities.map((facility: Facility) => facility.location.latitude);
+//     const longitudes = validFacilities.map((facility: Facility) => facility.location.longitude);
+//     const avgLat = latitudes.reduce((a, b) => a + b, 0) / latitudes.length;
+//     const avgLng = longitudes.reduce((a, b) => a + b, 0) / longitudes.length;
+
+//     // Update map center
+//     map.current.setCenter([avgLng, avgLat]);
+
+//     // Add markers for each facility
+//     validFacilities.forEach((facility: Facility) => {
+//       // Create custom marker element
+//       const markerEl = document.createElement('div');
+//       markerEl.className = 'custom-marker';
+//       markerEl.style.width = '30px';
+//       markerEl.style.height = '30px';
+//       markerEl.style.backgroundSize = 'contain';
+//       markerEl.style.backgroundRepeat = 'no-repeat';
+//       markerEl.style.cursor = 'pointer';
+      
+//       // Set icon based on facility type
+//       const iconUrl = facility.type === 'hospital' 
+//         ? '/assets/icons/hospital.svg'
+//         : facility.type === 'pharmacy'
+//         ? '/assets/icons/pharmacy.svg'
+//         : facility.type === 'clinic'
+//         ? '/assets/icons/clinic.svg'
+//         : '/assets/icons/ambulance.svg';
+      
+//       markerEl.style.backgroundImage = `url(${iconUrl})`;
+
+//       // Create marker
+//       const marker = new maptilersdk.Marker({ element: markerEl })
+//         .setLngLat([facility.location.longitude, facility.location.latitude])
+//         .addTo(map.current!);
+
+//       // Add click event
+//       markerEl.addEventListener('click', () => {
+//         console.log('Facility clicked:', facility);
+//         // You can add popup or other interactions here
+//         new maptilersdk.Popup()
+//           .setLngLat([facility.location.longitude, facility.location.latitude])
+//           .setHTML(`
+//             <div>
+//               <h3>${facility.name || facility.type}</h3>
+//               <p>Type: ${facility.type}</p>
+//             </div>
+//           `)
+//           .addTo(map.current!);
+//       });
+//     });
+
+//   }, [facilities, mapLoaded]);
+
+//   if (!process.env.REACT_APP_MAPTILER_API_KEY && !maptilersdk.config.apiKey) {
+//     return (
+//       <div style={{ 
+//         width: '100%', 
+//         height: '100%', 
+//         display: 'flex', 
+//         alignItems: 'center', 
+//         justifyContent: 'center',
+//         backgroundColor: '#f5f5f5'
+//       }}>
+//         <div style={{ textAlign: 'center', padding: '20px' }}>
+//           <h3>MapTiler API Key Required</h3>
+//           <p>Please add REACT_APP_MAPTILER_API_KEY to your environment variables</p>
+//         </div>
+//       </div>
+//     );
+//   }
+  
 
 //   return (
-//     <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY}>
-//       <GoogleMap mapContainerStyle={containerStyle} center={mapCenter} zoom={12}>
-//         {loading && <div>Loading...</div>}
-//         {facilities.map((facility: Facility) => (
-//           <Marker
-//             key={facility.id}
-//             position={{ lat: facility.location.lat, lng: facility.location.lng }}
-//             icon={{
-//               url: facility.type === 'hospital' ? '/assets/icons/hospital.svg' : 
-//                    facility.type === 'pharmacy' ? '/assets/icons/pharmacy.svg' : 
-//                    facility.type === 'clinic' ? '/assets/icons/clinic.svg' : 
-//                    '/assets/icons/ambulance.svg',
-//               scaledSize: new window.google.maps.Size(30, 30)
-//             }}
-//           />
-//         ))}
-//       </GoogleMap>
-//     </LoadScript>
+//     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+//       <div ref={mapContainer} style={{ width: '100%', height: '500px' }} />
+//       {loading && (
+//         <div style={{
+//           position: 'absolute',
+//           top: '50%',
+//           left: '50%',
+//           transform: 'translate(-50%, -50%)',
+//           background: 'white',
+//           padding: '15px 20px',
+//           borderRadius: '8px',
+//           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+//           zIndex: 1000
+//         }}>
+//           Loading facilities...
+//         </div>
+//       )}
+//     </div>
 //   );
 // };
 
